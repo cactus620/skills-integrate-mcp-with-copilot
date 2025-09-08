@@ -1,8 +1,110 @@
 document.addEventListener("DOMContentLoaded", () => {
+
   const activitiesList = document.getElementById("activities-list");
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const searchInput = document.getElementById("activity-search");
+  const sortSelect = document.getElementById("activity-sort");
+
+  let allActivities = {};
+
+  // Function to render activities with filters/sorting/search
+  function renderActivities() {
+    let activities = Object.entries(allActivities);
+
+    // Filter by search
+    const search = searchInput.value.trim().toLowerCase();
+    if (search) {
+      activities = activities.filter(([name, details]) =>
+        name.toLowerCase().includes(search) ||
+        (details.description && details.description.toLowerCase().includes(search))
+      );
+    }
+
+    // Sort
+    if (sortSelect.value === "name") {
+      activities.sort((a, b) => a[0].localeCompare(b[0]));
+    } else if (sortSelect.value === "spots") {
+      activities.sort((a, b) => {
+        const spotsA = a[1].max_participants - a[1].participants.length;
+        const spotsB = b[1].max_participants - b[1].participants.length;
+        return spotsB - spotsA;
+      });
+    }
+
+    // Clear list
+    activitiesList.innerHTML = "";
+
+    if (activities.length === 0) {
+      activitiesList.innerHTML = "<p>No activities found.</p>";
+      return;
+    }
+
+    // Populate activities list
+    activities.forEach(([name, details]) => {
+      const activityCard = document.createElement("div");
+      activityCard.className = "activity-card";
+
+      const spotsLeft = details.max_participants - details.participants.length;
+
+      // Create participants HTML with delete icons instead of bullet points
+      const participantsHTML =
+        details.participants.length > 0
+          ? `<div class="participants-section">
+              <h5>Participants:</h5>
+              <ul class="participants-list">
+                ${details.participants
+                  .map(function(email) {
+                    return '<li><span class="participant-email">' + email + '</span><button class="delete-btn" data-activity="' + name + '" data-email="' + email + '">❌</button></li>';
+                  })
+                  .join("")}
+              </ul>
+            </div>`
+          : '<p><em>No participants yet</em></p>';
+
+      activityCard.innerHTML = `
+        <h4>${name}</h4>
+        <p>${details.description}</p>
+        <p><strong>Schedule:</strong> ${details.schedule}</p>
+        <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+        <div class="participants-container">
+          ${participantsHTML}
+        </div>
+      `;
+
+      activitiesList.appendChild(activityCard);
+    });
+
+    // Add event listeners to delete buttons
+    document.querySelectorAll(".delete-btn").forEach((button) => {
+      button.addEventListener("click", handleUnregister);
+    });
+  }
+
+  // Function to fetch activities from API
+  async function fetchActivities() {
+    try {
+      const response = await fetch("/activities");
+      const activities = await response.json();
+      allActivities = activities;
+
+      // Populate select dropdown
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+      Object.keys(activities).forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        activitySelect.appendChild(option);
+      });
+
+      renderActivities();
+    } catch (error) {
+      activitiesList.innerHTML =
+        "<p>Failed to load activities. Please try again later.</p>";
+      console.error("Error fetching activities:", error);
+    }
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -27,7 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
             ? `<div class="participants-section">
               <h5>Participants:</h5>
               <ul class="participants-list">
-                ${details.participants
+        fetchActivities();
                   .map(
                     (email) =>
                       `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
@@ -72,7 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const button = event.target;
     const activity = button.getAttribute("data-activity");
     const email = button.getAttribute("data-email");
-
+        fetchActivities();
     try {
       const response = await fetch(
         `/activities/${encodeURIComponent(
@@ -91,6 +193,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Refresh activities list to show updated participants
         fetchActivities();
+
+  // Add event listeners for search and sort
+  if (searchInput) searchInput.addEventListener("input", renderActivities);
+  if (sortSelect) sortSelect.addEventListener("change", renderActivities);
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
